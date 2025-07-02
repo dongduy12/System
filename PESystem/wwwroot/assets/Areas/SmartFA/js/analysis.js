@@ -52,6 +52,8 @@ const ApiService = (function () {
         uploadGuide: (formData) => uploadFile('/FixGuide/Upload', formData),
         repairStatus: (payload) => fetchAPI('/RepairStatus/repair-status', 'POST', payload),
         handOverStatus: (payload) => fetchAPI('/RepairStatus/hand-over-status', 'POST', payload),
+        receivingStatus: (payload) => fetchAPI('/RepairStatus/receiving-status', 'POST', payload),
+        getAllowedAreas: (payload) => fetchAPI('/SearchFA/get-allowed-areas', 'POST', payload),
         getLatestTester: (payload) => fetchAPI('/SearchFA/get-latest-tester', 'POST', payload)
     };
 })();
@@ -256,6 +258,20 @@ const DataTableManager = (function () {
         return rowData;
     }
 
+    function removeRowsBySerialNumbers(serialNumbers, existingSet) {
+        snTable.rows().every(function () {
+            const data = this.data();
+            const sn = data[0].trim();
+            if (serialNumbers.includes(sn)) {
+                if (existingSet) {
+                    existingSet.delete(sn);
+                }
+                this.remove();
+            }
+        });
+        snTable.draw(false);
+    }
+
     function truncateText(text, maxLength) {
         if (text && text.length > maxLength) {
             return text.substring(0, maxLength) + "...";
@@ -273,7 +289,8 @@ const DataTableManager = (function () {
         populateRepairHistoryTable,
         populateTesterInfoTable,
         getAllSerialNumbers,
-        getRowData
+        getRowData,
+        removeRowsBySerialNumbers
     };
 })();
 
@@ -376,7 +393,8 @@ const FormHandler = (function () {
     }
 
     return {
-        setup: setupEventListeners
+        setup: setupEventListeners,
+        getExistingSNs: () => existingSNs
     };
 })();
 
@@ -1115,6 +1133,91 @@ const TesterInfoManager = (function () {
     };
 })();
 
+// Module: HandoverManager - Quản lý giao nhận bản
+const HandoverManager = (function () {
+    function setupEventListeners() {
+        $('#btn-handover').on('click', handleHandover);
+        $('#btn-receive').on('click', handleReceive);
+    }
+
+    async function handleHandover() {
+        const serialNumbers = DataTableManager.getAllSerialNumbers();
+        if (!serialNumbers.length) {
+            showWarning('Không có dữ liệu để giao!');
+            return;
+        }
+
+        const payload = {
+            serialNumbers: serialNumbers.join(','),
+            handOverStatus: 'WAITING_HAND_OVER',
+            tag: 'Giao'
+        };
+
+        try {
+            const result = await ApiService.handOverStatus(payload);
+            const clean = result.message.replace(/"/g, '').trim();
+            if (result.success && clean === 'OK') {
+                DataTableManager.removeRowsBySerialNumbers(serialNumbers, FormHandler.getExistingSNs());
+                showSuccess('Giao bản thành công!');
+            } else {
+                showError('Không thể giao bản!');
+            }
+        } catch (error) {
+            showError('Lỗi khi gọi API!');
+        }
+    }
+
+    function showLocationModal(callback) {
+        $('#locationInput').val('');
+        const modal = new bootstrap.Modal(document.getElementById('locationModal'));
+        $('#confirmLocation').off('click').on('click', function () {
+            const location = $('#locationInput').val().trim();
+            modal.hide();
+            callback(location);
+        });
+        modal.show();
+    }
+
+    async function handleReceive() {
+        const serialNumbers = DataTableManager.getAllSerialNumbers();
+        if (!serialNumbers.length) {
+            showWarning('Không có dữ liệu để nhận!');
+            return;
+        }
+
+        showLocationModal(async (location) => {
+            if (!location) {
+                showWarning('Vui lòng nhập vị trí!');
+                return;
+            }
+
+            const payload = {
+                serialNumbers: serialNumbers.join(','),
+                owner: $('#analysisPerson').val(),
+                location,
+                tag: 'Nhận'
+            };
+
+            try {
+                const result = await ApiService.receivingStatus(payload);
+                const clean = result.message.replace(/"/g, '').trim();
+                if (result.success && clean === 'OK') {
+                    DataTableManager.removeRowsBySerialNumbers(serialNumbers, FormHandler.getExistingSNs());
+                    showSuccess('Nhận bản thành công!');
+                } else {
+                    showError('Không thể nhận bản!');
+                }
+            } catch (error) {
+                showError('Lỗi khi gọi API!');
+            }
+        });
+    }
+
+    return {
+        setup: setupEventListeners
+    };
+})();
+
 // Module: BackToTop - Quản lý nút Back to Top
 const BackToTop = (function () {
     function setup() {
@@ -1152,5 +1255,6 @@ $(document).ready(function () {
     GuideManager.setup();
     StatusManager.setup();
     TesterInfoManager.setup();
+    HandoverManager.setup();
     BackToTop.setup();
 });
