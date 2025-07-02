@@ -51,6 +51,7 @@ namespace API_WEB.Controllers.SmartFA
                           && (string.IsNullOrEmpty(request.TestCode) || task.TEST_CODE == request.TestCode)
                           && (string.IsNullOrEmpty(request.Status) || task.DATA11 == request.Status)
                           && (string.IsNullOrEmpty(request.HandoverStatus) || task.DATA13 == request.HandoverStatus)
+                          && (string.IsNullOrEmpty(request.Location) || task.DATA18 == request.Location)
                     select new
                     {
                         task.SERIAL_NUMBER,
