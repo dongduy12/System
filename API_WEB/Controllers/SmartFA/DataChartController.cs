@@ -69,5 +69,43 @@ namespace API_WEB.Controllers.SmartFA
             }
         }
 
+        [HttpGet("getCountLocation")]
+        public async Task<IActionResult> GetLocationCount()
+        {
+            var now = DateTime.Now;
+
+            var locationData = await (
+                from task in _oracleContext.OracleDataRepairTask
+                where !string.IsNullOrEmpty(task.DATA18) && task.DATA18 != "TRONG_KHO"
+                join err in _oracleContext.ErrorCodes
+                    on task.REASON_CODE equals err.ERROR_CODE into errJoin
+                from err in errJoin.DefaultIfEmpty()
+                group new { task, err } by task.DATA18 into g
+                select new
+                {
+                    Location = g.Key,
+                    TotalCount = g.Count(),
+                    Details = g.Select(x => new
+                    {
+                        SerialNumber = x.task.SERIAL_NUMBER,
+                        TestCode = x.task.TEST_CODE,
+                        ErrorDesc = x.err != null ? x.err.ERROR_DESC : string.Empty,
+                        MONumber = x.task.MO_NUMBER,
+                        ModelName = x.task.MODEL_NAME,
+                        Aging = x.task.DATE3.HasValue ? Math.Round((now - x.task.DATE3.Value).TotalDays, 2) : (double?)null
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            int totalAllLocations = locationData.Sum(d => d.TotalCount);
+            var sortedLocations = locationData.OrderByDescending(d => d.TotalCount).ToList();
+
+            return Ok(new
+            {
+                TotalAllLocations = totalAllLocations,
+                Locations = sortedLocations
+            });
+        }
+
     }
 }
