@@ -54,7 +54,9 @@ const ApiService = (function () {
         handOverStatus: (payload) => fetchAPI('/RepairStatus/hand-over-status', 'POST', payload),
         receivingStatus: (payload) => fetchAPI('/RepairStatus/receiving-status', 'POST', payload),
         getAllowedAreas: (payload) => fetchAPI('/SearchFA/get-allowed-areas', 'POST', payload),
-        getLatestTester: (payload) => fetchAPI('/SearchFA/get-latest-tester', 'POST', payload)
+        getLatestTester: (payload) => fetchAPI('/SearchFA/get-latest-tester', 'POST', payload),
+        getStatusCounts: (type) => fetchAPI('/SearchFA/get-status-counts', 'POST', type),
+        getLocationCounts: () => fetchAPI('/DataChart/getCountLocation', 'GET')
     };
 })();
 
@@ -148,7 +150,7 @@ const DataTableManager = (function () {
                     data-serial-number="${item.seriaL_NUMBER}">
                     Thêm
             </button>`,
-            `<button class="btn btn-info btn-sm btn-repair-detail"j0 
+            `<button class="btn btn-info btn-sm btn-repair-detail" 
                     data-serial-number="${item.seriaL_NUMBER}">
                     Chi tiết
             </button>`,
@@ -1218,6 +1220,100 @@ const HandoverManager = (function () {
     };
 })();
 
+// Module: ChartManager - handle charts for location and handover status
+const ChartManager = (function () {
+    let locationChart, handoverChart;
+
+    async function drawLocationChart() {
+        const canvas = document.getElementById('locationChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const result = await ApiService.getLocationCounts();
+        if (!result || !result.locations) return;
+
+        const labels = result.locations.map(l => l.location);
+        const counts = result.locations.map(l => l.totalCount);
+
+        if (locationChart) locationChart.destroy();
+        locationChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Số lượng',
+                    data: counts,
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: 'Số Lượng SN Theo Vị Trí' },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        color: 'black',
+                        font: { weight: 'bold', size: 12 }
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            },
+            plugins: [ChartDataLabels]
+        });
+    }
+
+    async function drawHandoverStatusChart() {
+        const canvas = document.getElementById('handoverStatusChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const result = await ApiService.getStatusCounts('HANDOVER');
+        if (!result || !result.success) return;
+
+        const labels = result.data.map(d => d.status);
+        const counts = result.data.map(d => d.count);
+
+        if (handoverChart) handoverChart.destroy();
+        handoverChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Số lượng',
+                    data: counts,
+                    backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: 'WAITING_HAND_OVER' },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        color: 'black',
+                        font: { weight: 'bold', size: 12 }
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            },
+            plugins: [ChartDataLabels]
+        });
+    }
+
+    async function init() {
+        await drawLocationChart();
+        await drawHandoverStatusChart();
+    }
+
+    return { init };
+})();
+
 // Module: BackToTop - Quản lý nút Back to Top
 const BackToTop = (function () {
     function setup() {
@@ -1256,5 +1352,6 @@ $(document).ready(function () {
     StatusManager.setup();
     TesterInfoManager.setup();
     HandoverManager.setup();
+    ChartManager.init();
     BackToTop.setup();
 });
