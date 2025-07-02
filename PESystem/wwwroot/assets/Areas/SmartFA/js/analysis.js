@@ -1222,47 +1222,80 @@ const HandoverManager = (function () {
 
 // Module: ChartManager - handle charts for location and handover status
 const ChartManager = (function () {
-    let locationChart, handoverChart;
+    let locationChart, handoverChart, locationDataMap = {};
 
     async function drawLocationChart() {
-        const canvas = document.getElementById('locationChart');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
+        const container = document.querySelector('#locationChart');
+        if (!container) return;
+
         const result = await ApiService.getLocationCounts();
         if (!result || !result.locations) return;
 
         const labels = result.locations.map(l => l.location);
         const counts = result.locations.map(l => l.totalCount);
 
+        // Map location to detail list for click handler
+        locationDataMap = {};
+        result.locations.forEach(l => { locationDataMap[l.location] = l.details; });
+
         if (locationChart) locationChart.destroy();
-        locationChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Số lượng',
-                    data: counts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    title: { display: true, text: 'Số Lượng SN Theo Vị Trí' },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'end',
-                        color: 'black',
-                        font: { weight: 'bold', size: 12 }
+        const options = {
+            series: [{ name: 'Số lượng', data: counts }],
+            chart: {
+                type: 'bar',
+                height: 350,
+                events: {
+                    dataPointSelection: function (event, chartContext, config) {
+                        const index = config.dataPointIndex;
+                        const loc = labels[index];
+                        showLocationDetails(loc);
                     }
-                },
-                scales: { y: { beginAtZero: true } }
+                }
             },
-            plugins: [ChartDataLabels]
+            plotOptions: { bar: { borderRadius: 10, columnWidth: '50%' } },
+            dataLabels: { enabled: false },
+            stroke: { width: 0 },
+            grid: { row: { colors: ['#fff', '#f2f2f2'] } },
+            xaxis: { labels: { rotate: -45 }, categories: labels, tickPlacement: 'on' },
+            yaxis: { title: { text: 'Số lượng' } },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shade: 'light',
+                    type: 'horizontal',
+                    shadeIntensity: 0.25,
+                    gradientToColors: undefined,
+                    inverseColors: true,
+                    opacityFrom: 0.85,
+                    opacityTo: 0.85,
+                    stops: [50, 0, 100]
+                }
+            }
+        };
+
+        locationChart = new ApexCharts(container, options);
+        locationChart.render();
+    }
+
+    function showLocationDetails(location) {
+        const details = locationDataMap[location] || [];
+        const tbody = document.querySelector('#locationDetailTable tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        details.forEach(d => {
+            const row = `<tr>
+                <td>${d.serialNumber}</td>
+                <td>${d.testCode}</td>
+                <td>${d.errorDesc}</td>
+                <td>${d.moNumber}</td>
+                <td>${d.modelName}</td>
+                <td>${d.aging ?? ''}</td>
+            </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
         });
+        document.getElementById('detailLocationName').textContent = location;
+        const modal = new bootstrap.Modal(document.getElementById('locationDetailModal'));
+        modal.show();
     }
 
     async function drawHandoverStatusChart() {
